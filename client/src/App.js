@@ -106,15 +106,44 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center'
   },
+  // Special style for large scripts
+  scriptBox: {
+    background: '#0a0a0a',
+    padding: '15px',
+    borderRadius: '6px',
+    border: '1px solid #333',
+    fontFamily: 'monospace',
+    color: '#a5d6a7', 
+    fontSize: '0.85rem',
+    margin: '10px 0 20px 0',
+    whiteSpace: 'pre-wrap', 
+    overflowX: 'auto',
+    maxHeight: '300px',
+    overflowY: 'auto',
+    position: 'relative'
+  },
   copyBtn: {
-    background: 'transparent',
+    background: 'rgba(255,255,255,0.1)',
     border: '1px solid #555',
-    color: '#aaa',
-    padding: '5px 10px',
+    color: '#fff',
+    padding: '6px 12px',
     borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '0.8rem',
-    marginLeft: '10px'
+    marginLeft: '10px',
+    flexShrink: 0
+  },
+  copyBtnFloating: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    background: '#2C4E80',
+    color: '#fff',
+    border: 'none',
+    padding: '8px 15px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
   },
 
   // Full Screen
@@ -151,12 +180,88 @@ function App() {
     setDims(prev => ({ ...prev, [type]: val }));
   };
 
-  // --- URL LOGIC ---
   const rawImageUrl = `${BACKEND_BASE}/api/calendar?width=${dims.w}&height=${dims.h}`;
-  const windowsUrl = `${BACKEND_BASE}/view?width=${dims.w}&height=${dims.h}`;
 
-  // Linux: Download One-Liner
-  const linuxCommand = `wget -O ~/.life-calendar.png "${rawImageUrl}" && gsettings set org.gnome.desktop.background picture-uri "file://$HOME/.life-calendar.png"`;
+  // --- WINDOWS POWERSHELL SCRIPT ---
+  // Note the escaped backslashes (\\) for JS string literals
+  const windowsScript = `# PowerShell Installer for Life Calendar
+$Url = "${rawImageUrl}"
+$Dest = "$env:USERPROFILE\\Pictures\\LifeCalendar.png"
+$ScriptPath = "$env:USERPROFILE\\Documents\\Update-LifeCalendar.ps1"
+
+Write-Host "⏳ Installing Life Calendar..."
+
+# 1. Create the persistent Updater Script
+$Code = @"
+`$Url = "$Url&t=" + (Get-Date).Ticks
+`$Dest = "$Dest"
+
+# Download Image
+Invoke-WebRequest -Uri `$Url -OutFile `$Dest
+
+# Set Wallpaper using SystemParametersInfo (Reliable method)
+`$c_code = @'
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet=CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+Add-Type -TypeDefinition `$c_code 
+[Wallpaper]::SystemParametersInfo(20, 0, `$Dest, 3)
+"@
+
+Set-Content -Path $ScriptPath -Value $Code
+
+# 2. Run it immediately to set wallpaper now
+PowerShell -ExecutionPolicy Bypass -File $ScriptPath
+
+# 3. Schedule Daily Task (6:00 AM)
+$TaskName = "LifeCalendarUpdate"
+$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File \`"$ScriptPath\`""
+$Trigger = New-ScheduledTaskTrigger -Daily -At 6am
+
+# Unregister if exists, then register new
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Force
+
+Write-Host "✅ Success! Wallpaper will update daily at 6:00 AM."
+Start-Sleep -Seconds 5`;
+
+  // --- LINUX INSTALLER SCRIPT ---
+  const linuxInstallScript = `#!/bin/bash
+WIDTH=${dims.w}
+HEIGHT=${dims.h}
+TARGET_DIR="$HOME/.local/bin"
+UPDATER_SCRIPT="$TARGET_DIR/update-life-calendar.sh"
+IMAGE_PATH="$HOME/.life-calendar.png"
+URL="${BACKEND_BASE}/api/calendar?width=$WIDTH&height=$HEIGHT"
+
+echo "⚙️  Setting up Life Calendar..."
+mkdir -p "$TARGET_DIR"
+
+# Write the updater script
+cat <<EOF > "$UPDATER_SCRIPT"
+#!/bin/bash
+wget -q -O "$IMAGE_PATH" "$URL&t=\$(date +%s)"
+PID=\$(pgrep -u \$USER gnome-session | head -n 1)
+if [ -n "\$PID" ]; then
+    export DBUS_SESSION_BUS_ADDRESS=\$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/\$PID/environ | cut -d= -f2-)
+fi
+gsettings set org.gnome.desktop.background picture-uri "file://$IMAGE_PATH"
+gsettings set org.gnome.desktop.background picture-uri-dark "file://$IMAGE_PATH"
+EOF
+
+chmod +x "$UPDATER_SCRIPT"
+"$UPDATER_SCRIPT"
+
+if ! crontab -l 2>/dev/null | grep -q "$UPDATER_SCRIPT"; then
+    (crontab -l 2>/dev/null; echo "0 6 * * * $UPDATER_SCRIPT") | crontab -
+    echo "✅ Automation scheduled!"
+else
+    echo "✅ Automation already exists."
+fi
+echo "🎉 Done!"`;
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -244,17 +349,25 @@ function App() {
       {activeTab === 'windows' && (
         <div style={styles.instructionBox}>
           <h3 style={styles.stepTitle}>Installation for Windows</h3>
-          <p style={{color: '#888', marginBottom: '20px'}}>Use this special Viewer Link in "Lively Wallpaper" to fix black bars.</p>
-          
-          <div style={styles.codeBox}>
-            {windowsUrl}
-            <button style={styles.copyBtn} onClick={() => copyToClipboard(windowsUrl)}>{copyFeedback || 'Copy'}</button>
-          </div>
+          <p style={{color: '#ccc', marginBottom: '20px', lineHeight: '1.6'}}>
+            This <b>PowerShell script</b> will create a hidden task to automatically 
+            download and set your wallpaper every day. No extra apps required.
+          </p>
 
           <ol style={styles.stepList}>
-            <li>Open <b>Lively Wallpaper</b> (Free on Store).</li>
-            <li>Click <b>+ Add</b> → Select "Enter URL".</li>
-            <li>Paste the link above and click Go.</li>
+            <li>Create a new file named <code>install.ps1</code> on your Desktop.</li>
+            <li>Paste the code below into it:</li>
+          </ol>
+
+          <div style={styles.scriptBox}>
+            {windowsScript}
+            <button style={styles.copyBtnFloating} onClick={() => copyToClipboard(windowsScript)}>
+              {copyFeedback || 'Copy Script'}
+            </button>
+          </div>
+
+          <ol style={styles.stepList} start={3}>
+            <li>Right-click the file and select <b>"Run with PowerShell"</b>.</li>
           </ol>
         </div>
       )}
@@ -262,21 +375,30 @@ function App() {
       {/* LINUX INSTRUCTIONS */}
       {activeTab === 'linux' && (
         <div style={styles.instructionBox}>
-          <h3 style={styles.stepTitle}>Installation for Linux</h3>
-          <p style={{color: '#888', marginBottom: '20px'}}>You can use the direct image link in tools like <b>Variety</b>, or run the command below.</p>
-          
-          {/* 1. The Direct Link (User Request) */}
-          <div style={styles.codeBox}>
-            {rawImageUrl}
-            <button style={styles.copyBtn} onClick={() => copyToClipboard(rawImageUrl)}>{copyFeedback || 'Copy'}</button>
+          <h3 style={styles.stepTitle}>Installation for Linux (GNOME)</h3>
+          <p style={{color: '#ccc', marginBottom: '20px', lineHeight: '1.6'}}>
+            This script downloads the wallpaper, sets it for both Light/Dark modes, 
+            and creates a daily cron job.
+          </p>
+
+          <ol style={styles.stepList}>
+            <li>Create a file named <code>install.sh</code> and paste the code below:</li>
+          </ol>
+
+          <div style={styles.scriptBox}>
+            {linuxInstallScript}
+            <button style={styles.copyBtnFloating} onClick={() => copyToClipboard(linuxInstallScript)}>
+              {copyFeedback || 'Copy Script'}
+            </button>
           </div>
 
-          {/* 2. The Terminal One-Liner (For Automation) */}
-          <p style={{color: '#888', marginTop: '30px', marginBottom: '10px'}}>Or run this one-liner to download & apply immediately (GNOME):</p>
-          <div style={styles.codeBox}>
-            {linuxCommand}
-            <button style={styles.copyBtn} onClick={() => copyToClipboard(linuxCommand)}>{copyFeedback || 'Copy'}</button>
-          </div>
+          <ol style={styles.stepList} start={2}>
+            <li>Run the installer in terminal:</li>
+            <div style={styles.codeBox}>
+              chmod +x install.sh && ./install.sh
+              <button style={styles.copyBtn} onClick={() => copyToClipboard('chmod +x install.sh && ./install.sh')}>Copy</button>
+            </div>
+          </ol>
         </div>
       )}
 
