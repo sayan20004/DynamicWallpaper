@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // --- CONFIGURATION ---
 const DEPLOYED_BACKEND_URL = 'https://dynamicwallpaper.onrender.com'; 
@@ -51,7 +51,7 @@ const styles = {
     fontSize: '1rem',
     cursor: 'pointer',
     fontWeight: 'bold',
-    marginTop: '18px' // Align with inputs
+    marginTop: '18px'
   },
   urlBox: {
     background: '#222',
@@ -73,54 +73,52 @@ const styles = {
     boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
     marginBottom: '40px'
   },
-  // Full Screen Modal Styles
-  modalOverlay: {
+  // --- REAL FULLSCREEN STYLES ---
+  fullscreenContainer: {
     position: 'fixed',
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    display: 'flex',
-    flexDirection: 'column',
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: '#000', // Pure black for immersive feel
+    display: 'flex', // We toggle this via inline style
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
-    padding: '20px'
+    zIndex: 9999
   },
-  modalImg: {
-    maxWidth: '95%',
-    maxHeight: '85vh',
-    borderRadius: '8px',
-    boxShadow: '0 0 50px rgba(0,0,0,0.8)',
-    border: '2px solid #555'
+  fullscreenImg: {
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain' // Ensures the whole calendar fits without scrolling
   },
-  closeBtn: {
-    marginTop: '20px',
-    padding: '10px 30px',
-    backgroundColor: '#ff4444',
-    color: 'white',
-    border: 'none',
-    borderRadius: '50px',
-    fontSize: '1.2rem',
-    cursor: 'pointer'
+  exitBtn: {
+    position: 'absolute',
+    top: '20px',
+    right: '20px',
+    padding: '10px 20px',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    color: '#fff',
+    border: '1px solid rgba(255,255,255,0.4)',
+    borderRadius: '30px',
+    cursor: 'pointer',
+    backdropFilter: 'blur(10px)'
   }
 };
 
 function App() {
-  // Use "customDims" to track what the user types
   const [customDims, setCustomDims] = useState({ w: 0, h: 0 });
   const [url, setUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  
+  // We use this ref to target the specific div we want to make fullscreen
+  const fullscreenRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // 1. On Load: Auto-detect screen size
   useEffect(() => {
     const w = window.screen.width * window.devicePixelRatio;
     const h = window.screen.height * window.devicePixelRatio;
     setCustomDims({ w, h });
   }, []);
 
-  // 2. Whenever dimensions change, update the URL
   useEffect(() => {
     if (customDims.w > 0) {
       setUrl(`${API_BASE}?width=${customDims.w}&height=${customDims.h}&t=${Date.now()}`);
@@ -133,11 +131,46 @@ function App() {
     setCustomDims(prev => ({ ...prev, [type]: val }));
   };
 
+  // --- TRIGGER TRUE FULLSCREEN ---
+  const enterFullscreen = () => {
+    if (fullscreenRef.current) {
+      setIsFullscreen(true); // Show the div
+      // Request native browser fullscreen
+      if (fullscreenRef.current.requestFullscreen) {
+        fullscreenRef.current.requestFullscreen();
+      } else if (fullscreenRef.current.webkitRequestFullscreen) { // Safari
+        fullscreenRef.current.webkitRequestFullscreen();
+      } else if (fullscreenRef.current.msRequestFullscreen) { // IE11
+        fullscreenRef.current.msRequestFullscreen();
+      }
+    }
+  };
+
+  // --- EXIT FULLSCREEN ---
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+    setIsFullscreen(false);
+  };
+
+  // Listen for "Esc" key to update state if user exits via keyboard
+  useEffect(() => {
+    const handleChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleChange);
+    return () => document.removeEventListener('fullscreenchange', handleChange);
+  }, []);
+
   return (
     <div style={styles.container}>
       <h1 style={styles.header}>2026 Calendar Wallpaper</h1>
       
-      {/* --- CONTROL PANEL --- */}
       <div style={styles.controls}>
         <div style={styles.inputGroup}>
           <label style={styles.label}>Width (px)</label>
@@ -159,11 +192,8 @@ function App() {
           />
         </div>
 
-        <button 
-          style={styles.button} 
-          onClick={() => setShowModal(true)}
-        >
-          👁️ Preview Full Screen
+        <button style={styles.button} onClick={enterFullscreen}>
+          ⛶ Go Full Screen
         </button>
       </div>
 
@@ -172,25 +202,26 @@ function App() {
           <p><strong>Your Dynamic Link:</strong></p>
           <div style={styles.urlBox}>{url}</div>
           
-          <p style={{color:'#888', marginBottom:'10px'}}>Small Preview:</p>
+          <p style={{color:'#888', marginBottom:'10px'}}>Preview:</p>
           <img src={url} alt="Preview" style={styles.img} />
         </>
       )}
 
-      {/* --- FULL SCREEN MODAL --- */}
-      {showModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
-          <img 
-            src={url} 
-            alt="Full Screen Preview" 
-            style={styles.modalImg} 
-            onClick={(e) => e.stopPropagation()} // Prevent clicking image from closing
-          />
-          <button style={styles.closeBtn} onClick={() => setShowModal(false)}>
-            Close Preview
-          </button>
-        </div>
-      )}
+      {/* --- HIDDEN FULLSCREEN LAYER --- */}
+      {/* We keep this in the DOM but hidden until needed */}
+      <div 
+        ref={fullscreenRef} 
+        style={{
+          ...styles.fullscreenContainer,
+          display: isFullscreen ? 'flex' : 'none'
+        }}
+      >
+        <img src={url} alt="Full Screen" style={styles.fullscreenImg} />
+        
+        <button style={styles.exitBtn} onClick={exitFullscreen}>
+          Exit Full Screen
+        </button>
+      </div>
     </div>
   );
 }
