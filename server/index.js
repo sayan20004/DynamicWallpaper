@@ -3,7 +3,6 @@ import { createCanvas } from 'canvas';
 import cors from 'cors';
 
 const app = express();
-// Use the port Render assigns, or 5001 if on localhost
 const port = process.env.PORT || 5001;
 
 app.use(cors());
@@ -17,6 +16,7 @@ const COLORS = {
   highlightText: '#F3EFE3' 
 };
 
+// Calendar Logic
 const getMonthCalendar = (year, monthIndex) => {
   const firstDay = new Date(year, monthIndex, 1).getDay(); 
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -26,43 +26,60 @@ const getMonthCalendar = (year, monthIndex) => {
 
 app.get('/api/calendar', (req, res) => {
   try {
+    // 1. Get Dimensions
     const width = parseInt(req.query.width) || 2560;
     const height = parseInt(req.query.height) || 1664;
+    
+    // 2. Determine Orientation (Landscape vs Portrait)
+    const isLandscape = width >= height;
+    
+    // 3. Responsive Grid Settings
+    // Landscape: 4 Cols x 3 Rows
+    // Portrait:  2 Cols x 6 Rows (Better for phones)
+    const cols = isLandscape ? 4 : 2;
+    const rows = isLandscape ? 3 : 6;
+
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // 1. Background
+    // 4. Background
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, width, height);
 
-    // 2. Layout Framework
-    const padding = width * 0.04; 
+    // 5. Layout Framework
+    const padding = Math.min(width, height) * 0.05; // 5% padding based on smallest side
     const contentW = width - (padding * 2);
     const contentH = height - (padding * 2);
     
+    // Draw Border
     ctx.strokeStyle = COLORS.text;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = Math.min(width, height) * 0.003; // Responsive border thickness
     ctx.strokeRect(padding, padding, contentW, contentH);
 
-    // 3. Header "2026"
+    // 6. Header "2026"
+    // Allocate 10-15% of vertical space for header
     const headerH = contentH * 0.12; 
+    
     ctx.fillStyle = COLORS.text;
-    ctx.font = `bold ${headerH * 0.9}px sans-serif`; 
+    // Font size based on width, but capped for vertical screens
+    const titleFontSize = Math.min(contentW * 0.15, headerH * 0.8);
+    ctx.font = `bold ${titleFontSize}px sans-serif`; 
     ctx.textBaseline = 'middle';
     ctx.fillText(YEAR.toString(), padding + (contentW * 0.02), padding + (headerH / 2));
 
-    // 4. Grid Setup
-    const gridTop = padding + headerH + (contentH * 0.02); 
-    const gridH = (padding + contentH) - gridTop - (contentH * 0.02); 
+    // 7. Grid Calculation
+    const gridTop = padding + headerH; 
+    const gridH = (padding + contentH) - gridTop - (padding * 0.5); // Bottom padding
     
-    const colW = contentW / 4;
-    const rowH = gridH / 3;
+    const colW = contentW / cols;
+    const rowH = gridH / rows;
 
-    // Font Sizing
-    const bigNumSize = colW * 0.22;    
-    const monthNameSize = colW * 0.08; 
-    const dayTextSize = colW * 0.045;  
-    const cellPadding = colW * 0.08;   
+    // --- RESPONSIVE FONT SIZING ---
+    // We calculate font sizes based on the *cell width*, so it scales perfectly
+    const bigNumSize = colW * 0.20;     // "01"
+    const monthNameSize = colW * 0.07;  // "January"
+    const dayTextSize = colW * 0.042;   // "1, 2, 3..."
+    const cellPadding = colW * 0.08;    // Internal padding
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const weekHeader = "Mo Tu We Th Fr Sa Su".split(" ");
@@ -74,35 +91,41 @@ app.get('/api/calendar', (req, res) => {
 
     // --- RENDER LOOP ---
     for (let m = 0; m < 12; m++) {
-      const col = m % 4;
-      const row = Math.floor(m / 4);
+      const col = m % cols;
+      const row = Math.floor(m / cols);
 
       const cellX = padding + (col * colW);
       const cellY = gridTop + (row * rowH);
-      const headerY = cellY; 
+
+      // A. Month Header
+      const headerY = cellY + (rowH * 0.05);
       
       ctx.fillStyle = COLORS.text;
       ctx.textBaseline = 'top';
       
-      // Number & Name
+      // Number "01"
       ctx.font = `bold ${bigNumSize}px sans-serif`;
       ctx.fillText((m + 1).toString().padStart(2, '0'), cellX + cellPadding, headerY);
       
+      // Name "January"
       const numWidth = ctx.measureText((m + 1).toString().padStart(2, '0')).width;
       ctx.font = `bold ${monthNameSize}px sans-serif`;
-      ctx.fillText(monthNames[m], cellX + cellPadding + numWidth + 15, headerY + (bigNumSize * 0.2));
+      ctx.fillText(monthNames[m], cellX + cellPadding + numWidth + (colW * 0.03), headerY + (bigNumSize * 0.25));
 
-      // Grid
+      // B. Days Grid
+      // We calculate exact vertical space available for the 7 rows of text (header + 6 weeks)
       const gridStartY = headerY + bigNumSize + (rowH * 0.02); 
-      const availableHeightForDays = rowH - (bigNumSize + (rowH * 0.05));
-      const lineSpacingY = availableHeightForDays / 8; 
-      const daySpacingX = (colW - (cellPadding * 2)) / 7;
+      const availableH = rowH - (bigNumSize + (rowH * 0.1));
+      const lineSpacingY = availableH / 8; // Distribute vertically
+      const daySpacingX = (colW - (cellPadding * 2)) / 7; // Distribute horizontally
 
+      // Week Headers
       ctx.font = `${dayTextSize}px sans-serif`;
       weekHeader.forEach((day, i) => {
         ctx.fillText(day, cellX + cellPadding + (i * daySpacingX), gridStartY);
       });
 
+      // Days
       const { daysInMonth, startDayOffset } = getMonthCalendar(YEAR, m);
       let drawX = startDayOffset;
       let drawY = 1; 
@@ -111,6 +134,7 @@ app.get('/api/calendar', (req, res) => {
         const xPos = cellX + cellPadding + (drawX * daySpacingX);
         const yPos = gridStartY + (drawY * lineSpacingY);
 
+        // Highlight Logic
         if (isCurrentYear && m === currentMonth && d === currentDay) {
             const radius = dayTextSize * 1.1;
             const cx = xPos + (ctx.measureText(d.toString()).width / 2);
