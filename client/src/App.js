@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // --- CONFIGURATION ---
-// Replace with your actual Render URL
 const DEPLOYED_BACKEND_URL = 'https://dynamicwallpaper.onrender.com'; 
 
 const BACKEND_BASE = DEPLOYED_BACKEND_URL 
@@ -22,7 +21,7 @@ const styles = {
   header: { fontSize: '2.8rem', marginBottom: '10px', color: '#F3EFE3', fontWeight: '800', textAlign: 'center' },
   subHeader: { fontSize: '1.1rem', color: '#888', marginBottom: '40px', textAlign: 'center', maxWidth: '600px', lineHeight: '1.5' },
   
-  // Controls Area
+  // Controls
   controls: {
     display: 'flex',
     gap: '15px',
@@ -35,11 +34,7 @@ const styles = {
     borderRadius: '12px',
     border: '1px solid #333'
   },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start'
-  },
+  inputGroup: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start' },
   label: { fontSize: '0.85rem', color: '#aaa', marginBottom: '8px', fontWeight: '500' },
   input: {
     padding: '12px',
@@ -61,10 +56,10 @@ const styles = {
     cursor: 'pointer',
     fontWeight: '600',
     transition: 'background 0.2s',
-    height: '44px' // Match input height
+    height: '44px'
   },
 
-  // Instructions Section
+  // Tabs
   tabs: {
     display: 'flex',
     marginBottom: '20px',
@@ -84,6 +79,7 @@ const styles = {
     transition: 'all 0.2s'
   }),
   
+  // Instructions
   instructionBox: {
     background: '#161616',
     border: '1px solid #333',
@@ -121,7 +117,7 @@ const styles = {
     marginLeft: '10px'
   },
 
-  // Full Screen Styles
+  // Full Screen
   fullscreenContainer: {
     position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
     backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
@@ -137,13 +133,12 @@ const styles = {
 
 function App() {
   const [dims, setDims] = useState({ w: 0, h: 0 });
-  const [activeTab, setActiveTab] = useState('mac'); // 'mac' or 'windows'
+  const [activeTab, setActiveTab] = useState('mac'); 
   const [copyFeedback, setCopyFeedback] = useState('');
   
   const fullscreenRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Auto-detect resolution on load
   useEffect(() => {
     setDims({
       w: window.screen.width * window.devicePixelRatio,
@@ -156,11 +151,12 @@ function App() {
     setDims(prev => ({ ...prev, [type]: val }));
   };
 
-  // Generate specific URLs
-  // Mac uses the raw image API
-  const macUrl = `${BACKEND_BASE}/api/calendar?width=${dims.w}&height=${dims.h}`;
-  // Windows uses the HTML viewer to fix black bars
+  // --- URL LOGIC ---
+  const rawImageUrl = `${BACKEND_BASE}/api/calendar?width=${dims.w}&height=${dims.h}`;
   const windowsUrl = `${BACKEND_BASE}/view?width=${dims.w}&height=${dims.h}`;
+
+  // Linux: Download One-Liner
+  const linuxCommand = `wget -O ~/.life-calendar.png "${rawImageUrl}" && gsettings set org.gnome.desktop.background picture-uri "file://$HOME/.life-calendar.png"`;
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -168,7 +164,6 @@ function App() {
     setTimeout(() => setCopyFeedback(''), 2000);
   };
 
-  // Fullscreen Logic
   const enterFullscreen = () => {
     if (fullscreenRef.current) {
       setIsFullscreen(true);
@@ -198,7 +193,7 @@ function App() {
         <br />Select your OS below to get started.
       </p>
 
-      {/* --- CONTROLS --- */}
+      {/* CONTROLS */}
       <div style={styles.controls}>
         <div style={styles.inputGroup}>
           <label style={styles.label}>Width</label>
@@ -213,62 +208,84 @@ function App() {
         </button>
       </div>
 
-      {/* --- TABS --- */}
+      {/* TABS */}
       <div style={styles.tabs}>
         <div style={styles.tab(activeTab === 'mac')} onClick={() => setActiveTab('mac')}>
-           macOS / iOS
+           macOS
         </div>
         <div style={styles.tab(activeTab === 'windows')} onClick={() => setActiveTab('windows')}>
           🪟 Windows
         </div>
+        <div style={styles.tab(activeTab === 'linux')} onClick={() => setActiveTab('linux')}>
+          🐧 Linux
+        </div>
       </div>
 
-      {/* --- INSTRUCTIONS --- */}
+      {/* MAC INSTRUCTIONS */}
       {activeTab === 'mac' && (
         <div style={styles.instructionBox}>
-          <h3 style={styles.stepTitle}>How to install on Apple Devices</h3>
+          <h3 style={styles.stepTitle}>Installation for macOS / iOS</h3>
+          <p style={{color: '#888', marginBottom: '20px'}}>Use this link in the Shortcuts App to automate your background.</p>
+          
+          <div style={styles.codeBox}>
+            {rawImageUrl}
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(rawImageUrl)}>{copyFeedback || 'Copy'}</button>
+          </div>
+          
           <ol style={styles.stepList}>
-            <li>Open the <b>Shortcuts App</b> on your Mac or iPhone.</li>
-            <li>Create a new Automation/Shortcut.</li>
-            <li>Add Action: <b>"Get Contents of URL"</b> and paste this link:</li>
-            <div style={styles.codeBox}>
-              {macUrl}
-              <button style={styles.copyBtn} onClick={() => copyToClipboard(macUrl)}>
-                {copyFeedback || 'Copy'}
-              </button>
-            </div>
-            <li>Add Action: <b>"Set Wallpaper"</b> using the contents from step 3.</li>
-            <li>Set up an Automation to run this shortcut daily (e.g., at 6:00 AM).</li>
+            <li>Open <b>Shortcuts App</b> → New Automation.</li>
+            <li>Add <b>"Get Contents of URL"</b> (Paste above link).</li>
+            <li>Add <b>"Set Wallpaper"</b>.</li>
           </ol>
         </div>
       )}
 
+      {/* WINDOWS INSTRUCTIONS */}
       {activeTab === 'windows' && (
         <div style={styles.instructionBox}>
-          <h3 style={styles.stepTitle}>How to install on Windows</h3>
+          <h3 style={styles.stepTitle}>Installation for Windows</h3>
+          <p style={{color: '#888', marginBottom: '20px'}}>Use this special Viewer Link in "Lively Wallpaper" to fix black bars.</p>
+          
+          <div style={styles.codeBox}>
+            {windowsUrl}
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(windowsUrl)}>{copyFeedback || 'Copy'}</button>
+          </div>
+
           <ol style={styles.stepList}>
-            <li>Download the free app <b>Lively Wallpaper</b> from the Microsoft Store.</li>
-            <li>Open Lively and click the <b>+ (Add Wallpaper)</b> button.</li>
-            <li>Select "Enter URL" and paste this special viewer link:</li>
-            <div style={styles.codeBox}>
-              {windowsUrl}
-              <button style={styles.copyBtn} onClick={() => copyToClipboard(windowsUrl)}>
-                {copyFeedback || 'Copy'}
-              </button>
-            </div>
-            <li>Click <b>Go</b>. Lively will now display your calendar and auto-refresh it every hour.</li>
-            <li><i>Note: This link uses a special viewer to remove black bars on your screen.</i></li>
+            <li>Open <b>Lively Wallpaper</b> (Free on Store).</li>
+            <li>Click <b>+ Add</b> → Select "Enter URL".</li>
+            <li>Paste the link above and click Go.</li>
           </ol>
         </div>
       )}
 
-      {/* --- HIDDEN FULLSCREEN LAYER --- */}
+      {/* LINUX INSTRUCTIONS */}
+      {activeTab === 'linux' && (
+        <div style={styles.instructionBox}>
+          <h3 style={styles.stepTitle}>Installation for Linux</h3>
+          <p style={{color: '#888', marginBottom: '20px'}}>You can use the direct image link in tools like <b>Variety</b>, or run the command below.</p>
+          
+          {/* 1. The Direct Link (User Request) */}
+          <div style={styles.codeBox}>
+            {rawImageUrl}
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(rawImageUrl)}>{copyFeedback || 'Copy'}</button>
+          </div>
+
+          {/* 2. The Terminal One-Liner (For Automation) */}
+          <p style={{color: '#888', marginTop: '30px', marginBottom: '10px'}}>Or run this one-liner to download & apply immediately (GNOME):</p>
+          <div style={styles.codeBox}>
+            {linuxCommand}
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(linuxCommand)}>{copyFeedback || 'Copy'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN PREVIEW */}
       <div 
         ref={fullscreenRef} 
         style={{...styles.fullscreenContainer, display: isFullscreen ? 'flex' : 'none'}}
       >
-        {/* We use the Mac URL for preview because it's just the raw image */}
-        <img src={macUrl + `&t=${Date.now()}`} alt="Full Screen" style={styles.fullscreenImg} />
+        <img src={rawImageUrl + `&t=${Date.now()}`} alt="Full Screen" style={styles.fullscreenImg} />
         <button style={styles.exitBtn} onClick={exitFullscreen}>Exit Preview</button>
       </div>
     </div>
