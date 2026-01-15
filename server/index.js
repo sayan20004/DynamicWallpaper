@@ -24,8 +24,8 @@ const getMonthCalendar = (year, monthIndex) => {
   return { daysInMonth, startDayOffset };
 };
 
-// --- ROUTE 1: The "Viewer" for Lively Wallpaper/Browsers ---
-// Use this link in Lively Wallpaper: https://your-url.onrender.com/view?width=2560&height=1600
+// --- ROUTE 1: The "Viewer" for Lively Wallpaper ---
+// FIXED: Now uses 'object-fit: fill' to eliminate black bars
 app.get('/view', (req, res) => {
   const width = req.query.width || 1920;
   const height = req.query.height || 1080;
@@ -41,16 +41,14 @@ app.get('/view', (req, res) => {
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* CRITICAL: Stops scrollbars */
+            overflow: hidden; 
             background-color: ${COLORS.bg};
-            display: flex;
-            align-items: center;
-            justify-content: center;
           }
           img {
-            max-width: 100vw;
-            max-height: 100vh;
-            object-fit: contain; /* Ensures image fits inside window perfectly */
+            width: 100vw;
+            height: 100vh;
+            /* CHANGE: 'fill' forces the image to stretch to edges, removing black bars */
+            object-fit: fill; 
             display: block;
           }
         </style>
@@ -65,29 +63,27 @@ app.get('/view', (req, res) => {
 });
 
 // --- ROUTE 2: The Image Generator (API) ---
-// This draws the actual PNG file
 app.get('/api/calendar', (req, res) => {
   try {
-    // 1. Get Dimensions
     const width = parseInt(req.query.width) || 2560;
     const height = parseInt(req.query.height) || 1664;
     
-    // 2. Determine Orientation
+    // Determine Orientation
     const isLandscape = width >= height;
     
-    // 3. Responsive Grid Settings
+    // Responsive Grid Settings
     const cols = isLandscape ? 4 : 2;
     const rows = isLandscape ? 3 : 6;
 
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // 4. Background
+    // Background
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, width, height);
 
-    // 5. Layout Framework
-    const padding = Math.min(width, height) * 0.05; // 5% padding
+    // Layout Framework
+    const padding = Math.min(width, height) * 0.05; 
     const contentW = width - (padding * 2);
     const contentH = height - (padding * 2);
     
@@ -96,7 +92,7 @@ app.get('/api/calendar', (req, res) => {
     ctx.lineWidth = Math.min(width, height) * 0.003; 
     ctx.strokeRect(padding, padding, contentW, contentH);
 
-    // 6. Header "2026"
+    // Header "2026"
     const headerH = contentH * 0.12; 
     
     ctx.fillStyle = COLORS.text;
@@ -105,14 +101,14 @@ app.get('/api/calendar', (req, res) => {
     ctx.textBaseline = 'middle';
     ctx.fillText(YEAR.toString(), padding + (contentW * 0.02), padding + (headerH / 2));
 
-    // 7. Grid Calculation
+    // Grid Calculation
     const gridTop = padding + headerH; 
     const gridH = (padding + contentH) - gridTop - (padding * 0.5); 
     
     const colW = contentW / cols;
     const rowH = gridH / rows;
 
-    // Font Sizing (Relative to column width)
+    // Font Sizing 
     const bigNumSize = colW * 0.20;     
     const monthNameSize = colW * 0.07;  
     const dayTextSize = colW * 0.042;   
@@ -126,7 +122,7 @@ app.get('/api/calendar', (req, res) => {
     const currentMonth = now.getMonth();
     const isCurrentYear = now.getFullYear() === YEAR;
 
-    // --- RENDER LOOP ---
+    // Render Loop
     for (let m = 0; m < 12; m++) {
       const col = m % cols;
       const row = Math.floor(m / cols);
@@ -134,7 +130,7 @@ app.get('/api/calendar', (req, res) => {
       const cellX = padding + (col * colW);
       const cellY = gridTop + (row * rowH);
 
-      // A. Month Header
+      // Month Header
       const headerY = cellY + (rowH * 0.05);
       
       ctx.fillStyle = COLORS.text;
@@ -149,7 +145,7 @@ app.get('/api/calendar', (req, res) => {
       ctx.font = `bold ${monthNameSize}px sans-serif`;
       ctx.fillText(monthNames[m], cellX + cellPadding + numWidth + (colW * 0.03), headerY + (bigNumSize * 0.25));
 
-      // B. Days Grid
+      // Days Grid
       const gridStartY = headerY + bigNumSize + (rowH * 0.02); 
       const availableH = rowH - (bigNumSize + (rowH * 0.1));
       const lineSpacingY = availableH / 8; 
