@@ -182,8 +182,7 @@ function App() {
 
   const rawImageUrl = `${BACKEND_BASE}/api/calendar?width=${dims.w}&height=${dims.h}`;
 
-  // --- WINDOWS POWERSHELL SCRIPT ---
-  // Note the escaped backslashes (\\) for JS string literals
+  // --- WINDOWS SCRIPT (PowerShell) ---
   const windowsScript = `# PowerShell Installer for Life Calendar
 $Url = "${rawImageUrl}"
 $Dest = "$env:USERPROFILE\\Pictures\\LifeCalendar.png"
@@ -199,7 +198,7 @@ $Code = @"
 # Download Image
 Invoke-WebRequest -Uri \`$Url -OutFile \`$Dest
 
-# Set Wallpaper using SystemParametersInfo (Reliable method)
+# Set Wallpaper using SystemParametersInfo
 \`$c_code = @'
 using System.Runtime.InteropServices;
 public class Wallpaper {
@@ -213,22 +212,22 @@ Add-Type -TypeDefinition \`$c_code
 
 Set-Content -Path $ScriptPath -Value $Code
 
-# 2. Run it immediately to set wallpaper now
+# 2. Run it immediately
 PowerShell -ExecutionPolicy Bypass -File $ScriptPath
 
-# 3. Schedule Daily Task (6:00 AM)
+# 3. Schedule Daily Task
 $TaskName = "LifeCalendarUpdate"
-$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File \\\`"$ScriptPath\\\`""
+$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File \`"$ScriptPath\`""
 $Trigger = New-ScheduledTaskTrigger -Daily -At 6am
 
-# Unregister if exists, then register new
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:\`$false -ErrorAction SilentlyContinue
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Force
 
 Write-Host "✅ Success! Wallpaper will update daily at 6:00 AM."
 Start-Sleep -Seconds 5`;
 
-  // --- LINUX INSTALLER SCRIPT ---
+  // --- LINUX INSTALLER SCRIPT (Updated for Fedora/Modern GNOME) ---
+  // Change: Using direct /run/user/$UID/bus instead of searching for PID
   const linuxInstallScript = `#!/bin/bash
 WIDTH=${dims.w}
 HEIGHT=${dims.h}
@@ -243,11 +242,12 @@ mkdir -p "$TARGET_DIR"
 # Write the updater script
 cat <<EOF > "$UPDATER_SCRIPT"
 #!/bin/bash
-wget -q -O "$IMAGE_PATH" "$URL&t=\\\$(date +%s)"
-PID=\\\$(pgrep -u \\\$USER gnome-session | head -n 1)
-if [ -n "\\\$PID" ]; then
-    export DBUS_SESSION_BUS_ADDRESS=\\\$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/\\\$PID/environ | cut -d= -f2-)
-fi
+wget -q -O "$IMAGE_PATH" "$URL&t=\$(date +%s)"
+
+# CRITICAL FIX: Connect to the correct display bus (Modern Fedora/Ubuntu)
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/\$(id -u)/bus"
+
+# Set for both Light and Dark modes
 gsettings set org.gnome.desktop.background picture-uri "file://$IMAGE_PATH"
 gsettings set org.gnome.desktop.background picture-uri-dark "file://$IMAGE_PATH"
 EOF
