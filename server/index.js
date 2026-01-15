@@ -10,13 +10,13 @@ app.use(cors());
 // --- CONFIGURATION ---
 const YEAR = 2026;
 const COLORS = {
-  bg: '#F3EFE3',        
-  text: '#2C4E80',      
-  highlight: '#2C4E80', 
-  highlightText: '#F3EFE3' 
+  bg: '#F3EFE3',        // Cream Background
+  text: '#2C4E80',      // Navy Blue Text
+  highlight: '#2C4E80', // Navy Blue Circle
+  highlightText: '#F3EFE3' // Cream Text
 };
 
-// Calendar Logic
+// --- HELPER: Calendar Math ---
 const getMonthCalendar = (year, monthIndex) => {
   const firstDay = new Date(year, monthIndex, 1).getDay(); 
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -24,18 +24,58 @@ const getMonthCalendar = (year, monthIndex) => {
   return { daysInMonth, startDayOffset };
 };
 
+// --- ROUTE 1: The "Viewer" for Lively Wallpaper/Browsers ---
+// Use this link in Lively Wallpaper: https://your-url.onrender.com/view?width=2560&height=1600
+app.get('/view', (req, res) => {
+  const width = req.query.width || 1920;
+  const height = req.query.height || 1080;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Life Calendar Wallpaper</title>
+        <style>
+          body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* CRITICAL: Stops scrollbars */
+            background-color: ${COLORS.bg};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          img {
+            max-width: 100vw;
+            max-height: 100vh;
+            object-fit: contain; /* Ensures image fits inside window perfectly */
+            display: block;
+          }
+        </style>
+        <meta http-equiv="refresh" content="3600">
+      </head>
+      <body>
+        <img src="/api/calendar?width=${width}&height=${height}&t=${Date.now()}" alt="Wallpaper" />
+      </body>
+    </html>
+  `;
+  res.send(html);
+});
+
+// --- ROUTE 2: The Image Generator (API) ---
+// This draws the actual PNG file
 app.get('/api/calendar', (req, res) => {
   try {
     // 1. Get Dimensions
     const width = parseInt(req.query.width) || 2560;
     const height = parseInt(req.query.height) || 1664;
     
-    // 2. Determine Orientation (Landscape vs Portrait)
+    // 2. Determine Orientation
     const isLandscape = width >= height;
     
     // 3. Responsive Grid Settings
-    // Landscape: 4 Cols x 3 Rows
-    // Portrait:  2 Cols x 6 Rows (Better for phones)
     const cols = isLandscape ? 4 : 2;
     const rows = isLandscape ? 3 : 6;
 
@@ -47,21 +87,19 @@ app.get('/api/calendar', (req, res) => {
     ctx.fillRect(0, 0, width, height);
 
     // 5. Layout Framework
-    const padding = Math.min(width, height) * 0.05; // 5% padding based on smallest side
+    const padding = Math.min(width, height) * 0.05; // 5% padding
     const contentW = width - (padding * 2);
     const contentH = height - (padding * 2);
     
     // Draw Border
     ctx.strokeStyle = COLORS.text;
-    ctx.lineWidth = Math.min(width, height) * 0.003; // Responsive border thickness
+    ctx.lineWidth = Math.min(width, height) * 0.003; 
     ctx.strokeRect(padding, padding, contentW, contentH);
 
     // 6. Header "2026"
-    // Allocate 10-15% of vertical space for header
     const headerH = contentH * 0.12; 
     
     ctx.fillStyle = COLORS.text;
-    // Font size based on width, but capped for vertical screens
     const titleFontSize = Math.min(contentW * 0.15, headerH * 0.8);
     ctx.font = `bold ${titleFontSize}px sans-serif`; 
     ctx.textBaseline = 'middle';
@@ -69,17 +107,16 @@ app.get('/api/calendar', (req, res) => {
 
     // 7. Grid Calculation
     const gridTop = padding + headerH; 
-    const gridH = (padding + contentH) - gridTop - (padding * 0.5); // Bottom padding
+    const gridH = (padding + contentH) - gridTop - (padding * 0.5); 
     
     const colW = contentW / cols;
     const rowH = gridH / rows;
 
-    // --- RESPONSIVE FONT SIZING ---
-    // We calculate font sizes based on the *cell width*, so it scales perfectly
-    const bigNumSize = colW * 0.20;     // "01"
-    const monthNameSize = colW * 0.07;  // "January"
-    const dayTextSize = colW * 0.042;   // "1, 2, 3..."
-    const cellPadding = colW * 0.08;    // Internal padding
+    // Font Sizing (Relative to column width)
+    const bigNumSize = colW * 0.20;     
+    const monthNameSize = colW * 0.07;  
+    const dayTextSize = colW * 0.042;   
+    const cellPadding = colW * 0.08;    
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const weekHeader = "Mo Tu We Th Fr Sa Su".split(" ");
@@ -103,21 +140,20 @@ app.get('/api/calendar', (req, res) => {
       ctx.fillStyle = COLORS.text;
       ctx.textBaseline = 'top';
       
-      // Number "01"
+      // Number
       ctx.font = `bold ${bigNumSize}px sans-serif`;
       ctx.fillText((m + 1).toString().padStart(2, '0'), cellX + cellPadding, headerY);
       
-      // Name "January"
+      // Name
       const numWidth = ctx.measureText((m + 1).toString().padStart(2, '0')).width;
       ctx.font = `bold ${monthNameSize}px sans-serif`;
       ctx.fillText(monthNames[m], cellX + cellPadding + numWidth + (colW * 0.03), headerY + (bigNumSize * 0.25));
 
       // B. Days Grid
-      // We calculate exact vertical space available for the 7 rows of text (header + 6 weeks)
       const gridStartY = headerY + bigNumSize + (rowH * 0.02); 
       const availableH = rowH - (bigNumSize + (rowH * 0.1));
-      const lineSpacingY = availableH / 8; // Distribute vertically
-      const daySpacingX = (colW - (cellPadding * 2)) / 7; // Distribute horizontally
+      const lineSpacingY = availableH / 8; 
+      const daySpacingX = (colW - (cellPadding * 2)) / 7; 
 
       // Week Headers
       ctx.font = `${dayTextSize}px sans-serif`;
@@ -134,7 +170,6 @@ app.get('/api/calendar', (req, res) => {
         const xPos = cellX + cellPadding + (drawX * daySpacingX);
         const yPos = gridStartY + (drawY * lineSpacingY);
 
-        // Highlight Logic
         if (isCurrentYear && m === currentMonth && d === currentDay) {
             const radius = dayTextSize * 1.1;
             const cx = xPos + (ctx.measureText(d.toString()).width / 2);
