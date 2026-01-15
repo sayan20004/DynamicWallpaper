@@ -193,22 +193,22 @@ Write-Host "⏳ Installing Life Calendar..."
 
 # 1. Create the persistent Updater Script
 $Code = @"
-`$Url = "$Url&t=" + (Get-Date).Ticks
-`$Dest = "$Dest"
+\`$Url = "$Url&t=" + (Get-Date).Ticks
+\`$Dest = "$Dest"
 
 # Download Image
-Invoke-WebRequest -Uri `$Url -OutFile `$Dest
+Invoke-WebRequest -Uri \`$Url -OutFile \`$Dest
 
 # Set Wallpaper using SystemParametersInfo (Reliable method)
-`$c_code = @'
+\`$c_code = @'
 using System.Runtime.InteropServices;
 public class Wallpaper {
     [DllImport("user32.dll", CharSet=CharSet.Auto)]
     public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 }
 '@
-Add-Type -TypeDefinition `$c_code 
-[Wallpaper]::SystemParametersInfo(20, 0, `$Dest, 3)
+Add-Type -TypeDefinition \`$c_code 
+[Wallpaper]::SystemParametersInfo(20, 0, \`$Dest, 3)
 "@
 
 Set-Content -Path $ScriptPath -Value $Code
@@ -218,7 +218,7 @@ PowerShell -ExecutionPolicy Bypass -File $ScriptPath
 
 # 3. Schedule Daily Task (6:00 AM)
 $TaskName = "LifeCalendarUpdate"
-$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File \`"$ScriptPath\`""
+$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File \\\`"$ScriptPath\\\`""
 $Trigger = New-ScheduledTaskTrigger -Daily -At 6am
 
 # Unregister if exists, then register new
@@ -243,10 +243,10 @@ mkdir -p "$TARGET_DIR"
 # Write the updater script
 cat <<EOF > "$UPDATER_SCRIPT"
 #!/bin/bash
-wget -q -O "$IMAGE_PATH" "$URL&t=\$(date +%s)"
-PID=\$(pgrep -u \$USER gnome-session | head -n 1)
-if [ -n "\$PID" ]; then
-    export DBUS_SESSION_BUS_ADDRESS=\$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/\$PID/environ | cut -d= -f2-)
+wget -q -O "$IMAGE_PATH" "$URL&t=\\\$(date +%s)"
+PID=\\\$(pgrep -u \\\$USER gnome-session | head -n 1)
+if [ -n "\\\$PID" ]; then
+    export DBUS_SESSION_BUS_ADDRESS=\\\$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/\\\$PID/environ | cut -d= -f2-)
 fi
 gsettings set org.gnome.desktop.background picture-uri "file://$IMAGE_PATH"
 gsettings set org.gnome.desktop.background picture-uri-dark "file://$IMAGE_PATH"
